@@ -2,10 +2,13 @@ var express = require('express');
 var bodyParser = require('body-parser');
 var mongodb = require('mongodb');
 var objectId = require('mongodb').ObjectId;
+var multiparty = require('connect-multiparty');
+var fs = require('fs'); // módulo filesystem
 
 var app = express();
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
+app.use(multiparty());
 
 var port = 8080;
 
@@ -23,22 +26,44 @@ app.get('/', function (req, res) {
 });
 
 app.post('/api', function (req, res) {
-    var dados = req.body;
-    db.open(function (err, mongoclient) {
-        mongoclient.collection('postagens', function (err, collection) {
-            collection.insert(dados, function (err, records) {
-                if (err) {
-                    res.json(err);
-                } else {
-                    res.json(records.ops[0]._id + " inserido.");
-                }
-                mongoclient.close();
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
+    var timestamp = new Date().getTime();
+
+    // movendo arquivo fornecido na requisição para diretório 'uploads'
+    var urlImagem = timestamp + req.files.arquivo.originalFilename;
+    var pathOrigem = req.files.arquivo.path; // caminho temporário do arquivo no servidor
+    var pathDestino = './uploads/' + urlImagem;
+
+    fs.rename(pathOrigem, pathDestino, function (err) {
+        if (err) {
+            res.status(500).json({ error: err });
+            return;
+        }
+
+        var dados = {
+            url_imagem: urlImagem,
+            titulo: req.body.titulo
+        };
+
+        db.open(function (err, mongoclient) {
+            mongoclient.collection('postagens', function (err, collection) {
+                collection.insert(dados, function (err, records) {
+                    if (err) {
+                        res.json(err);
+                    } else {
+                        res.json(records.ops[0]._id + " inserido.");
+                    }
+                    mongoclient.close();
+                });
             });
         });
     });
 });
 
 app.get('/api', function (req, res) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    
     db.open(function (err, mongoclient) {
         mongoclient.collection('postagens', function (err, collection) {
             collection.find().toArray(function (err, results) {
